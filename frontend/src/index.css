@@ -1,0 +1,79 @@
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  background: #f5f6f8;
+  color: #1f2933;
+}
+
+.container { max-width: 760px; margin: 0 auto; padding: 32px 16px; }
+header h1 { margin: 0; }
+header p { margin: 4px 0 24px; color: #616e7c; }
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+  gap: 12px;
+  margin-bottom: 24px;
+}
+.stat {
+  background: white;
+  border-radius: 10px;
+  padding: 12px;
+  text-align: center;
+  font-size: 13px;
+  color: #616e7c;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+.stat span { display: block; font-size: 22px; font-weight: 700; color: #1f2933; }
+
+.add-form { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+.add-form input {
+  flex: 1;
+  min-width: 160px;
+  padding: 10px;
+  border: 1px solid #cbd2d9;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+button {
+  padding: 10px 14px;
+  border: none;
+  border-radius: 8px;
+  background: #3b5bdb;
+  color: white;
+  font-size: 14px;
+  cursor: pointer;
+}
+button:disabled { opacity: 0.6; cursor: default; }
+
+.filters { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; }
+.filters button { background: white; color: #3b5bdb; border: 1px solid #3b5bdb; }
+.filters button.active { background: #3b5bdb; color: white; }
+
+.app-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
+.app-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  background: white;
+  padding: 14px 16px;
+  border-radius: 10px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+.app-card h3 { margin: 0 0 4px; font-size: 16px; }
+.app-card p { margin: 0; color: #616e7c; font-size: 13px; }
+
+.actions { display: flex; gap: 8px; align-items: center; }
+.status { padding: 8px; border-radius: 8px; border: 1px solid #cbd2d9; font-size: 13px; }
+.status-interview { background: #fff4e6; }
+.status-offer { background: #e6fcf5; }
+.status-rejected { background: #fff5f5; }
+.delete { background: #e03131; }
+
+.error { background: #fff5f5; color: #c92a2a; padding: 10px; border-radius: 8px; }
+.empty { color: #616e7c; text-align: center; padding: 24px; }
