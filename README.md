@@ -22,3 +22,13 @@
 
 # 🚧 In development
 
+## Running with Docker
+
+1. Install Docker Desktop.
+2. Copy `.env.example` to `.env` and set a password.
+3. Run:
+```
+   docker compose up --build
+```
+4. Open http://localhost:8080
+
