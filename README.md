@@ -32,3 +32,4 @@
 ```
 4. Open http://localhost:8080
 
+![CI](https://github.com/sujaldusane/hireready/actions/workflows/ci.yml/badge.svg)
