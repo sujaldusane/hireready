@@ -1,6 +1,8 @@
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, current_app, jsonify, request
 from app import db
-from app.models import Application
+from app.ai import AIError, generate_interview_questions
+from app.models import Application, InterviewQuestion
+
 
 bp = Blueprint("api", __name__)
 
@@ -84,3 +86,44 @@ def delete_application(app_id):
     db.session.delete(application)
     db.session.commit()
     return "", 204
+
+MIN_JOB_DESCRIPTION_LENGTH = 50
+
+
+@bp.get("/applications/<int:app_id>/questions")
+def list_questions(app_id):
+    application = db.session.get(Application, app_id)
+    if application is None:
+        return not_found()
+    return jsonify([q.to_dict() for q in application.questions])
+
+
+@bp.post("/applications/<int:app_id>/questions")
+def create_questions(app_id):
+    application = db.session.get(Application, app_id)
+    if application is None:
+        return not_found()
+
+    job_description = (application.job_description or "").strip()
+    if len(job_description) < MIN_JOB_DESCRIPTION_LENGTH:
+        return jsonify({"error": "Add a job description of at least a few sentences first"}), 400
+
+    try:
+        questions = generate_interview_questions(
+            application.company, application.role, job_description
+        )
+    except AIError:
+        current_app.logger.exception("Interview question generation failed")
+        return jsonify({"error": "Could not generate questions right now. Please try again."}), 502
+
+    InterviewQuestion.query.filter_by(application_id=app_id).delete()
+    for q in questions:
+        db.session.add(InterviewQuestion(application_id=app_id, **q))
+    db.session.commit()
+
+    saved = (
+        InterviewQuestion.query.filter_by(application_id=app_id)
+        .order_by(InterviewQuestion.id)
+        .all()
+    )
+    return jsonify([q.to_dict() for q in saved]), 201

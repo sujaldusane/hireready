@@ -40,9 +40,9 @@ export default function App() {
       setApplications((prev) => [created, ...prev]);
     });
 
-  const handleStatusChange = (id, status) =>
+  const handleUpdate = (id, changes) =>
     run(async () => {
-      const updated = await updateApplication(id, { status });
+      const updated = await updateApplication(id, changes);
       setApplications((prev) => prev.map((a) => (a.id === id ? updated : a)));
     });
 
@@ -84,7 +84,7 @@ export default function App() {
       ) : (
         <ApplicationList
           applications={visible}
-          onStatusChange={handleStatusChange}
+          onUpdate={handleUpdate}
           onDelete={handleDelete}
         />
       )}

@@ -23,3 +23,8 @@ export const updateApplication = (id, changes) =>
 
 export const deleteApplication = (id) =>
   request(`/applications/${id}`, { method: "DELETE" });
+
+export const getQuestions = (id) => request(`/applications/${id}/questions`);
+
+export const generateQuestions = (id) =>
+  request(`/applications/${id}/questions`, { method: "POST" });
