@@ -11,6 +11,7 @@ body {
 header h1 { margin: 0; }
 header p { margin: 4px 0 24px; color: #616e7c; }
 
+/* Stats */
 .stats {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
@@ -28,7 +29,9 @@ header p { margin: 4px 0 24px; color: #616e7c; }
 }
 .stat span { display: block; font-size: 22px; font-weight: 700; color: #1f2933; }
 
-.add-form { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+/* Add application form */
+.add-form { display: grid; gap: 8px; margin-bottom: 16px; }
+.add-form-row { display: flex; gap: 8px; flex-wrap: wrap; }
 .add-form input {
   flex: 1;
   min-width: 160px;
@@ -38,6 +41,17 @@ header p { margin: 4px 0 24px; color: #616e7c; }
   font-size: 14px;
 }
 
+textarea {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #cbd2d9;
+  border-radius: 8px;
+  font: inherit;
+  font-size: 14px;
+  resize: vertical;
+}
+
+/* Buttons */
 button {
   padding: 10px 14px;
   border: none;
@@ -48,32 +62,64 @@ button {
   cursor: pointer;
 }
 button:disabled { opacity: 0.6; cursor: default; }
+button.secondary { background: white; color: #3b5bdb; border: 1px solid #3b5bdb; }
+.delete { background: #e03131; }
 
+/* Filters */
 .filters { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; }
 .filters button { background: white; color: #3b5bdb; border: 1px solid #3b5bdb; }
 .filters button.active { background: #3b5bdb; color: white; }
 
+/* Application cards */
 .app-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
 .app-card {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 12px;
   background: white;
   padding: 14px 16px;
   border-radius: 10px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
+.app-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
 .app-card h3 { margin: 0 0 4px; font-size: 16px; }
 .app-card p { margin: 0; color: #616e7c; font-size: 13px; }
 
-.actions { display: flex; gap: 8px; align-items: center; }
+.actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .status { padding: 8px; border-radius: 8px; border: 1px solid #cbd2d9; font-size: 13px; }
 .status-interview { background: #fff4e6; }
 .status-offer { background: #e6fcf5; }
 .status-rejected { background: #fff5f5; }
-.delete { background: #e03131; }
 
-.error { background: #fff5f5; color: #c92a2a; padding: 10px; border-radius: 8px; }
+/* Interview prep panel */
+.prep {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid #e4e7eb;
+  display: grid;
+  gap: 10px;
+}
+.prep-label { font-size: 13px; font-weight: 600; color: #3e4c59; }
+.prep-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.questions { margin: 0; padding-left: 20px; display: grid; gap: 10px; }
+.questions li { line-height: 1.5; }
+.tag {
+  display: inline-block;
+  margin-right: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  vertical-align: middle;
+}
+.tag-technical { background: #e7f5ff; color: #1864ab; }
+.tag-behavioral { background: #fff4e6; color: #d9480f; }
+.tag-role-specific { background: #f3f0ff; color: #5f3dc4; }
+
+/* Messages */
+.error { background: #fff5f5; color: #c92a2a; padding: 10px; border-radius: 8px; margin: 0; }
 .empty { color: #616e7c; text-align: center; padding: 24px; }
