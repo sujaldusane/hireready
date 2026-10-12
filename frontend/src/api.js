@@ -1,18 +1,24 @@
 const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:5000";
 
 async function request(path, options = {}) {
+  const isFormData = options.body instanceof FormData;
   const response = await fetch(`${API_URL}${path}`, {
-    headers: { "Content-Type": "application/json" },
     ...options,
+    headers: isFormData ? {} : { "Content-Type": "application/json" },
   });
 
   if (response.status === 204) return null;
 
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.error || "Request failed");
+  let data = null;
+  try {
+    data = await response.json();
+  } catch {
+    // Response wasn't JSON (e.g. a proxy error page)
+  }
+
+  if (!response.ok) throw new Error(data?.error || `Request failed (${response.status})`);
   return data;
 }
-
 export const getApplications = () => request("/applications");
 
 export const createApplication = (application) =>
@@ -28,3 +34,14 @@ export const getQuestions = (id) => request(`/applications/${id}/questions`);
 
 export const generateQuestions = (id) =>
   request(`/applications/${id}/questions`, { method: "POST" });
+
+export const getResumes = () => request("/resumes");
+
+export const uploadResume = (label, file) => {
+  const body = new FormData();
+  body.append("label", label);
+  body.append("file", file);
+  return request("/resumes", { method: "POST", body });
+};
+
+export const deleteResume = (id) => request(`/resumes/${id}`, { method: "DELETE" });

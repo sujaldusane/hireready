@@ -10,3 +10,4 @@ class Config:
 class TestConfig(Config):
     TESTING = True
     SQLALCHEMY_DATABASE_URI = os.getenv("TEST_DATABASE_URL")
+    MAX_CONTENT_LENGTH = 5 * 1024 * 1024 

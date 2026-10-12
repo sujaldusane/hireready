@@ -123,3 +123,42 @@ button.secondary { background: white; color: #3b5bdb; border: 1px solid #3b5bdb;
 /* Messages */
 .error { background: #fff5f5; color: #c92a2a; padding: 10px; border-radius: 8px; margin: 0; }
 .empty { color: #616e7c; text-align: center; padding: 24px; }
+
+/* Panels and resumes */
+.panel {
+  background: white;
+  border-radius: 10px;
+  padding: 16px;
+  margin-bottom: 16px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+.panel h2 { margin: 0 0 10px; font-size: 16px; }
+.hint { margin: 0 0 10px; color: #616e7c; font-size: 13px; }
+
+.resume-list { list-style: none; padding: 0; margin: 0 0 12px; display: grid; gap: 6px; }
+.resume-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.upload-form { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.upload-form input[type="text"],
+.upload-form input:not([type]) {
+  flex: 1;
+  min-width: 160px;
+  padding: 10px;
+  border: 1px solid #cbd2d9;
+  border-radius: 8px;
+  font-size: 14px;
+}
+.upload-form input[type="file"] { font-size: 13px; }
+
+.link-button {
+  background: none;
+  color: #e03131;
+  padding: 4px 6px;
+  font-size: 13px;
+}
