@@ -10,6 +10,12 @@ class Application(db.Model):
     status = db.Column(db.String(20), nullable=False, default="Applied")
     applied_date = db.Column(db.Date, nullable=False, default=date.today)
     job_description = db.Column(db.Text)
+    resume_id = db.Column(
+        db.Integer,
+        db.ForeignKey("resumes.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     questions = db.relationship(
         "InterviewQuestion",
@@ -26,6 +32,7 @@ class Application(db.Model):
             "status": self.status,
             "applied_date": self.applied_date.isoformat(),
             "job_description": self.job_description,
+            "resume_id": self.resume_id,
         }
 
 class InterviewQuestion(db.Model):
@@ -48,4 +55,25 @@ class InterviewQuestion(db.Model):
             "application_id": self.application_id,
             "category": self.category,
             "question": self.question,
+        }
+
+
+class Resume(db.Model):
+    __tablename__ = "resumes"
+
+    id = db.Column(db.Integer, primary_key=True)
+    label = db.Column(db.String(120), nullable=False)
+    filename = db.Column(db.String(255), nullable=False)
+    text = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    applications = db.relationship("Application", backref="resume")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "label": self.label,
+            "filename": self.filename,
+            "word_count": len(self.text.split()),
+            "created_at": self.created_at.isoformat() if self.created_at else None,
         }

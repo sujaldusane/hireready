@@ -12,4 +12,4 @@ COPY . .
 
 EXPOSE 5000
 
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "run:app"]
+CMD ["sh", "-c", "flask --app run db upgrade && exec gunicorn --bind 0.0.0.0:5000 run:app"]

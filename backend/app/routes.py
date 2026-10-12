@@ -1,23 +1,37 @@
 from flask import Blueprint, current_app, jsonify, request
+from werkzeug.utils import secure_filename
+
 from app import db
 from app.ai import AIError, generate_interview_questions
-from app.models import Application, InterviewQuestion
-
+from app.models import Application, InterviewQuestion, Resume
+from app.resumes import ResumeError, extract_pdf_text
 
 bp = Blueprint("api", __name__)
 
 VALID_STATUSES = {"Applied", "Interview", "Offer", "Rejected"}
-EDITABLE_FIELDS = ("company", "role", "status", "job_description")
+EDITABLE_FIELDS = ("company", "role", "status", "job_description", "resume_id")
+MIN_JOB_DESCRIPTION_LENGTH = 50
 
 
 def not_found():
     return jsonify({"error": "application not found"}), 404
 
 
+# ---------- Errors ----------
+
+@bp.app_errorhandler(413)
+def file_too_large(error):
+    return jsonify({"error": "File is too large. The maximum size is 5 MB."}), 413
+
+
+# ---------- Health ----------
+
 @bp.get("/health")
 def health():
     return jsonify({"status": "ok"})
 
+
+# ---------- Applications ----------
 
 @bp.get("/applications")
 def list_applications():
@@ -69,6 +83,13 @@ def update_application(app_id):
         if field in data and not data[field]:
             return jsonify({"error": f"{field} cannot be empty"}), 400
 
+    if "resume_id" in data and data["resume_id"] is not None:
+        resume_id = data["resume_id"]
+        if not isinstance(resume_id, int) or isinstance(resume_id, bool):
+            return jsonify({"error": "resume_id must be a number"}), 400
+        if db.session.get(Resume, resume_id) is None:
+            return jsonify({"error": "resume not found"}), 400
+
     for field in EDITABLE_FIELDS:
         if field in data:
             setattr(application, field, data[field])
@@ -87,8 +108,8 @@ def delete_application(app_id):
     db.session.commit()
     return "", 204
 
-MIN_JOB_DESCRIPTION_LENGTH = 50
 
+# ---------- Interview questions (AI) ----------
 
 @bp.get("/applications/<int:app_id>/questions")
 def list_questions(app_id):
@@ -127,3 +148,43 @@ def create_questions(app_id):
         .all()
     )
     return jsonify([q.to_dict() for q in saved]), 201
+
+
+# ---------- Resumes ----------
+
+@bp.get("/resumes")
+def list_resumes():
+    resumes = Resume.query.order_by(Resume.created_at.desc()).all()
+    return jsonify([r.to_dict() for r in resumes])
+
+
+@bp.post("/resumes")
+def upload_resume():
+    file = request.files.get("file")
+    if file is None or not file.filename:
+        return jsonify({"error": "Choose a PDF file to upload"}), 400
+
+    filename = secure_filename(file.filename) or "resume.pdf"
+    if not filename.lower().endswith(".pdf"):
+        return jsonify({"error": "Only PDF files are supported"}), 400
+
+    try:
+        text = extract_pdf_text(file.stream)
+    except ResumeError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    label = (request.form.get("label") or "").strip()[:120] or filename
+    resume = Resume(label=label, filename=filename, text=text)
+    db.session.add(resume)
+    db.session.commit()
+    return jsonify(resume.to_dict()), 201
+
+
+@bp.delete("/resumes/<int:resume_id>")
+def delete_resume(resume_id):
+    resume = db.session.get(Resume, resume_id)
+    if resume is None:
+        return jsonify({"error": "resume not found"}), 404
+    db.session.delete(resume)
+    db.session.commit()
+    return "", 204

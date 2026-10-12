@@ -7,7 +7,7 @@ const CATEGORY_LABELS = {
   "role-specific": "Role-specific",
 };
 
-export default function InterviewPrep({ application, onSaveDescription }) {
+export default function InterviewPrep({ application, resumes, onUpdate }) {
   const [questions, setQuestions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
@@ -21,11 +21,17 @@ export default function InterviewPrep({ application, onSaveDescription }) {
       .finally(() => setLoading(false));
   }, [application.id]);
 
-  const descriptionChanged = description.trim() !== (application.job_description || "").trim();
+  const descriptionChanged =
+    description.trim() !== (application.job_description || "").trim();
+
+  function handleResumeChange(e) {
+    const value = e.target.value;
+    onUpdate(application.id, { resume_id: value ? Number(value) : null });
+  }
 
   async function handleSaveDescription() {
     setError("");
-    await onSaveDescription(application.id, description.trim() || null);
+    await onUpdate(application.id, { job_description: description.trim() || null });
   }
 
   async function handleGenerate() {
@@ -40,8 +46,29 @@ export default function InterviewPrep({ application, onSaveDescription }) {
     }
   }
 
+  let generateLabel = "Generate interview questions";
+  if (generating) generateLabel = "Generating... (about 10 seconds)";
+  else if (questions.length) generateLabel = "Regenerate questions";
+
   return (
     <div className="prep">
+      <label className="prep-label" htmlFor={`resume-${application.id}`}>
+        Resume used for this application
+      </label>
+      <select
+        id={`resume-${application.id}`}
+        className="status"
+        value={application.resume_id ?? ""}
+        onChange={handleResumeChange}
+      >
+        <option value="">No resume linked</option>
+        {resumes.map((r) => (
+          <option key={r.id} value={r.id}>
+            {r.label}
+          </option>
+        ))}
+      </select>
+
       <label className="prep-label" htmlFor={`jd-${application.id}`}>
         Job description
       </label>
@@ -60,11 +87,7 @@ export default function InterviewPrep({ application, onSaveDescription }) {
           </button>
         )}
         <button onClick={handleGenerate} disabled={generating || descriptionChanged}>
-          {generating
-            ? "Generating... (about 10 seconds)"
-            : questions.length
-              ? "Regenerate questions"
-              : "Generate interview questions"}
+          {generateLabel}
         </button>
       </div>
 
