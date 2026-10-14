@@ -162,3 +162,45 @@ button.secondary { background: white; color: #3b5bdb; border: 1px solid #3b5bdb;
   padding: 4px 6px;
   font-size: 13px;
 }
+
+/* Resume match */
+.match {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  background: #f8f9fb;
+  border-radius: 8px;
+}
+.match-header { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+
+.match-result { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; }
+.score {
+  flex-shrink: 0;
+  width: 84px;
+  height: 84px;
+  border-radius: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-size: 26px;
+  font-weight: 700;
+}
+.score span { font-size: 11px; font-weight: 500; opacity: 0.8; }
+.score-high { background: #e6fcf5; color: #087f5b; }
+.score-medium { background: #fff4e6; color: #d9480f; }
+.score-low { background: #fff5f5; color: #c92a2a; }
+
+.match-details { flex: 1; min-width: 220px; }
+.match-details h4 { margin: 10px 0 4px; font-size: 13px; color: #3e4c59; }
+.match-details ul { margin: 0; padding-left: 18px; font-size: 14px; line-height: 1.5; }
+.match-summary { margin: 0; font-size: 14px; line-height: 1.5; }
+
+.chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip {
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: #fff;
+  border: 1px solid #cbd2d9;
+  font-size: 12px;
+}

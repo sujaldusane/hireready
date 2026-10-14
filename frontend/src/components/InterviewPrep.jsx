@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { generateQuestions, getQuestions } from "../api";
+import MatchAnalysis from "./MatchAnalysis";
 
 const CATEGORY_LABELS = {
   technical: "Technical",
@@ -23,6 +24,7 @@ export default function InterviewPrep({ application, resumes, onUpdate }) {
 
   const descriptionChanged =
     description.trim() !== (application.job_description || "").trim();
+  const hasDescription = Boolean((application.job_description || "").trim());
 
   function handleResumeChange(e) {
     const value = e.target.value;
@@ -80,12 +82,21 @@ export default function InterviewPrep({ application, resumes, onUpdate }) {
         placeholder="Paste the job description here"
       />
 
-      <div className="prep-actions">
-        {descriptionChanged && (
+      {descriptionChanged && (
+        <div className="prep-actions">
           <button className="secondary" onClick={handleSaveDescription}>
             Save description
           </button>
-        )}
+        </div>
+      )}
+
+      <MatchAnalysis
+        application={application}
+        disabled={descriptionChanged || !hasDescription}
+      />
+
+      <div className="prep-actions">
+        <span className="prep-label">Interview questions</span>
         <button onClick={handleGenerate} disabled={generating || descriptionChanged}>
           {generateLabel}
         </button>

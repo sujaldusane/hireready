@@ -2,8 +2,8 @@ from flask import Blueprint, current_app, jsonify, request
 from werkzeug.utils import secure_filename
 
 from app import db
-from app.ai import AIError, generate_interview_questions
-from app.models import Application, InterviewQuestion, Resume
+from app.ai import AIError, analyze_match, generate_interview_questions
+from app.models import Application, InterviewQuestion, MatchAnalysis, Resume, utc_now
 from app.resumes import ResumeError, extract_pdf_text
 
 bp = Blueprint("api", __name__)
@@ -13,8 +13,29 @@ EDITABLE_FIELDS = ("company", "role", "status", "job_description", "resume_id")
 MIN_JOB_DESCRIPTION_LENGTH = 50
 
 
+# ---------- Helpers ----------
+
 def not_found():
     return jsonify({"error": "application not found"}), 404
+
+
+def find_resume(resume_id):
+    """Return (resume, None) if valid, or (None, error_response) if not."""
+    if not isinstance(resume_id, int) or isinstance(resume_id, bool):
+        return None, (jsonify({"error": "resume_id must be a number"}), 400)
+    resume = db.session.get(Resume, resume_id)
+    if resume is None:
+        return None, (jsonify({"error": "resume not found"}), 400)
+    return resume, None
+
+
+def usable_job_description(application):
+    text = (application.job_description or "").strip()
+    return text if len(text) >= MIN_JOB_DESCRIPTION_LENGTH else None
+
+
+def job_description_error():
+    return jsonify({"error": "Add a job description of at least a few sentences first"}), 400
 
 
 # ---------- Errors ----------
@@ -83,12 +104,10 @@ def update_application(app_id):
         if field in data and not data[field]:
             return jsonify({"error": f"{field} cannot be empty"}), 400
 
-    if "resume_id" in data and data["resume_id"] is not None:
-        resume_id = data["resume_id"]
-        if not isinstance(resume_id, int) or isinstance(resume_id, bool):
-            return jsonify({"error": "resume_id must be a number"}), 400
-        if db.session.get(Resume, resume_id) is None:
-            return jsonify({"error": "resume not found"}), 400
+    if data.get("resume_id") is not None:
+        _, error = find_resume(data["resume_id"])
+        if error:
+            return error
 
     for field in EDITABLE_FIELDS:
         if field in data:
@@ -125,9 +144,9 @@ def create_questions(app_id):
     if application is None:
         return not_found()
 
-    job_description = (application.job_description or "").strip()
-    if len(job_description) < MIN_JOB_DESCRIPTION_LENGTH:
-        return jsonify({"error": "Add a job description of at least a few sentences first"}), 400
+    job_description = usable_job_description(application)
+    if job_description is None:
+        return job_description_error()
 
     try:
         questions = generate_interview_questions(
@@ -148,6 +167,60 @@ def create_questions(app_id):
         .all()
     )
     return jsonify([q.to_dict() for q in saved]), 201
+
+
+# ---------- Resume match (AI) ----------
+
+@bp.get("/applications/<int:app_id>/matches")
+def list_matches(app_id):
+    application = db.session.get(Application, app_id)
+    if application is None:
+        return not_found()
+
+    matches = (
+        MatchAnalysis.query.filter_by(application_id=app_id)
+        .order_by(MatchAnalysis.score.desc())
+        .all()
+    )
+    return jsonify([m.to_dict() for m in matches])
+
+
+@bp.post("/applications/<int:app_id>/match")
+def create_match(app_id):
+    application = db.session.get(Application, app_id)
+    if application is None:
+        return not_found()
+
+    data = request.get_json(silent=True) or {}
+    resume_id = data.get("resume_id", application.resume_id)
+    if resume_id is None:
+        return jsonify({"error": "Link a resume to this application first"}), 400
+
+    resume, error = find_resume(resume_id)
+    if error:
+        return error
+
+    job_description = usable_job_description(application)
+    if job_description is None:
+        return job_description_error()
+
+    try:
+        result = analyze_match(application.role, job_description, resume.text)
+    except AIError:
+        current_app.logger.exception("Resume match analysis failed")
+        return jsonify({"error": "Could not analyze the match right now. Please try again."}), 502
+
+    match = MatchAnalysis.query.filter_by(application_id=app_id, resume_id=resume.id).first()
+    if match is None:
+        match = MatchAnalysis(application_id=app_id, resume_id=resume.id)
+        db.session.add(match)
+
+    for field, value in result.items():
+        setattr(match, field, value)
+    match.analyzed_at = utc_now()
+
+    db.session.commit()
+    return jsonify(match.to_dict()), 201
 
 
 # ---------- Resumes ----------
