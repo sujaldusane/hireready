@@ -45,3 +45,11 @@ export const uploadResume = (label, file) => {
 };
 
 export const deleteResume = (id) => request(`/resumes/${id}`, { method: "DELETE" });
+
+export const getMatches = (id) => request(`/applications/${id}/matches`);
+
+export const analyzeMatch = (id, resumeId) =>
+  request(`/applications/${id}/match`, {
+    method: "POST",
+    body: JSON.stringify(resumeId ? { resume_id: resumeId } : {}),
+  });
