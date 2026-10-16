@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { generateQuestions, getQuestions } from "../api";
 import MatchAnalysis from "./MatchAnalysis";
+import { generateQuestions, getQuestions, waitForJob } from "../api";
 
 const CATEGORY_LABELS = {
   technical: "Technical",
@@ -40,7 +40,9 @@ export default function InterviewPrep({ application, resumes, onUpdate }) {
     setError("");
     setGenerating(true);
     try {
-      setQuestions(await generateQuestions(application.id));
+      const job = await generateQuestions(application.id);
+      await waitForJob(job);
+      setQuestions(await getQuestions(application.id));
     } catch (err) {
       setError(err.message);
     } finally {

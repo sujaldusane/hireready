@@ -1,10 +1,18 @@
+import uuid
 from datetime import date, datetime, timezone
 
 from app import db
 
+JOB_KINDS = ("questions", "match")
+JOB_ACTIVE_STATUSES = ("queued", "running")
+
 
 def utc_now():
     return datetime.now(timezone.utc)
+
+
+def new_job_id():
+    return str(uuid.uuid4())
 
 
 class Application(db.Model):
@@ -32,6 +40,11 @@ class Application(db.Model):
     )
     matches = db.relationship(
         "MatchAnalysis",
+        backref="application",
+        cascade="all, delete-orphan",
+    )
+    jobs = db.relationship(
+        "AIJob",
         backref="application",
         cascade="all, delete-orphan",
     )
@@ -86,6 +99,11 @@ class Resume(db.Model):
         backref="resume",
         cascade="all, delete-orphan",
     )
+    jobs = db.relationship(
+        "AIJob",
+        backref="resume",
+        cascade="all, delete-orphan",
+    )
 
     def to_dict(self):
         return {
@@ -133,4 +151,38 @@ class MatchAnalysis(db.Model):
             "missing_keywords": self.missing_keywords,
             "suggestions": self.suggestions,
             "analyzed_at": self.analyzed_at.isoformat() if self.analyzed_at else None,
+        }
+
+
+class AIJob(db.Model):
+    __tablename__ = "ai_jobs"
+
+    id = db.Column(db.String(36), primary_key=True, default=new_job_id)
+    kind = db.Column(db.String(20), nullable=False)
+    status = db.Column(db.String(20), nullable=False, default="queued")
+    application_id = db.Column(
+        db.Integer,
+        db.ForeignKey("applications.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    resume_id = db.Column(
+        db.Integer,
+        db.ForeignKey("resumes.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    error = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=utc_now)
+    started_at = db.Column(db.DateTime)
+    finished_at = db.Column(db.DateTime)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "kind": self.kind,
+            "status": self.status,
+            "application_id": self.application_id,
+            "resume_id": self.resume_id,
+            "error": self.error,
         }

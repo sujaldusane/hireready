@@ -21,16 +21,15 @@ def fake_ai(monkeypatch):
         calls.append(company)
         return FAKE_QUESTIONS
 
-    monkeypatch.setattr("app.routes.generate_interview_questions", fake_generate)
+    monkeypatch.setattr("app.services.generate_interview_questions", fake_generate)
     return calls
 
 
-@pytest.fixture
-def failing_ai(monkeypatch):
-    def fake_generate(company, role, job_description):
+def break_ai(monkeypatch):
+    def broken(company, role, job_description):
         raise AIError("simulated failure")
 
-    monkeypatch.setattr("app.routes.generate_interview_questions", fake_generate)
+    monkeypatch.setattr("app.services.generate_interview_questions", broken)
 
 
 def create(client, **overrides):
@@ -38,41 +37,55 @@ def create(client, **overrides):
     return client.post("/applications", json=payload).get_json()["id"]
 
 
+def generate(client, app_id):
+    return client.post(f"/applications/{app_id}/questions")
+
+
 def test_generate_requires_job_description(client, fake_ai):
     app_id = create(client)
-    response = client.post(f"/applications/{app_id}/questions")
+    response = generate(client, app_id)
     assert response.status_code == 400
     assert fake_ai == []
 
 
-def test_generate_saves_questions(client, fake_ai):
+def test_generate_runs_job_and_saves_questions(client, fake_ai):
     app_id = create(client, job_description=JOB_DESCRIPTION)
-    response = client.post(f"/applications/{app_id}/questions")
-    assert response.status_code == 201
-    assert len(response.get_json()) == 2
+    response = generate(client, app_id)
+
+    assert response.status_code == 202
+    job = response.get_json()
+    assert job["kind"] == "questions"
+    assert job["status"] == "succeeded"
 
     saved = client.get(f"/applications/{app_id}/questions").get_json()
-    assert saved[0]["question"] == FAKE_QUESTIONS[0]["question"]
+    assert [q["question"] for q in saved] == [q["question"] for q in FAKE_QUESTIONS]
+
+
+def test_job_status_can_be_fetched(client, fake_ai):
+    app_id = create(client, job_description=JOB_DESCRIPTION)
+    job_id = generate(client, app_id).get_json()["id"]
+
+    response = client.get(f"/jobs/{job_id}")
+    assert response.status_code == 200
+    assert response.get_json()["status"] == "succeeded"
 
 
 def test_regenerate_replaces_questions(client, fake_ai):
     app_id = create(client, job_description=JOB_DESCRIPTION)
-    client.post(f"/applications/{app_id}/questions")
-    client.post(f"/applications/{app_id}/questions")
+    generate(client, app_id)
+    generate(client, app_id)
     saved = client.get(f"/applications/{app_id}/questions").get_json()
     assert len(saved) == 2
 
 
-def test_ai_failure_returns_502_and_keeps_old_questions(client, fake_ai, monkeypatch):
+def test_ai_failure_marks_job_failed_and_keeps_old_questions(client, fake_ai, monkeypatch):
     app_id = create(client, job_description=JOB_DESCRIPTION)
-    client.post(f"/applications/{app_id}/questions")
+    generate(client, app_id)
 
-    def broken(company, role, job_description):
-        raise AIError("simulated failure")
-
-    monkeypatch.setattr("app.routes.generate_interview_questions", broken)
-    response = client.post(f"/applications/{app_id}/questions")
-    assert response.status_code == 502
+    break_ai(monkeypatch)
+    job = generate(client, app_id).get_json()
+    assert job["status"] == "failed"
+    assert "Could not generate" in job["error"]
 
     saved = client.get(f"/applications/{app_id}/questions").get_json()
     assert len(saved) == 2
@@ -80,7 +93,7 @@ def test_ai_failure_returns_502_and_keeps_old_questions(client, fake_ai, monkeyp
 
 def test_deleting_application_deletes_questions(client, fake_ai):
     app_id = create(client, job_description=JOB_DESCRIPTION)
-    client.post(f"/applications/{app_id}/questions")
+    generate(client, app_id)
     client.delete(f"/applications/{app_id}")
     assert client.get(f"/applications/{app_id}/questions").status_code == 404
 
