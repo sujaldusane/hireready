@@ -53,3 +53,24 @@ export const analyzeMatch = (id, resumeId) =>
     method: "POST",
     body: JSON.stringify(resumeId ? { resume_id: resumeId } : {}),
   });
+  export const getJob = (id) => request(`/jobs/${id}`);
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+export async function waitForJob(job, { interval = 1500, timeout = 90000 } = {}) {
+  const startedAt = Date.now();
+  let current = job;
+
+  while (current.status === "queued" || current.status === "running") {
+    if (Date.now() - startedAt > timeout) {
+      throw new Error("This is taking longer than expected. Please check back in a minute.");
+    }
+    await sleep(interval);
+    current = await getJob(current.id);
+  }
+
+  if (current.status === "failed") {
+    throw new Error(current.error || "The AI task failed. Please try again.");
+  }
+  return current;
+}

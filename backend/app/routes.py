@@ -1,10 +1,18 @@
 from flask import Blueprint, current_app, jsonify, request
+from redis.exceptions import RedisError
 from werkzeug.utils import secure_filename
 
 from app import db
-from app.ai import AIError, analyze_match, generate_interview_questions
-from app.models import Application, InterviewQuestion, MatchAnalysis, Resume, utc_now
+from app.models import (
+    JOB_ACTIVE_STATUSES,
+    AIJob,
+    Application,
+    MatchAnalysis,
+    Resume,
+    utc_now,
+)
 from app.resumes import ResumeError, extract_pdf_text
+from app.tasks import enqueue_job
 
 bp = Blueprint("api", __name__)
 
@@ -36,6 +44,42 @@ def usable_job_description(application):
 
 def job_description_error():
     return jsonify({"error": "Add a job description of at least a few sentences first"}), 400
+
+
+def start_job(kind, application, resume=None):
+    """Create an AI job (or reuse an active one) and hand it to the queue."""
+    active = AIJob.query.filter(
+        AIJob.application_id == application.id,
+        AIJob.kind == kind,
+        AIJob.status.in_(JOB_ACTIVE_STATUSES),
+    )
+    if resume is not None:
+        active = active.filter(AIJob.resume_id == resume.id)
+
+    existing = active.first()
+    if existing is not None:
+        return jsonify(existing.to_dict()), 202
+
+    job = AIJob(
+        kind=kind,
+        application_id=application.id,
+        resume_id=resume.id if resume else None,
+    )
+    db.session.add(job)
+    db.session.commit()
+
+    try:
+        enqueue_job(job.id)
+    except RedisError:
+        current_app.logger.exception("Could not enqueue AI job %s", job.id)
+        job.status = "failed"
+        job.error = "The AI service is temporarily unavailable. Please try again soon."
+        job.finished_at = utc_now()
+        db.session.commit()
+        return jsonify({"error": job.error}), 503
+
+    db.session.refresh(job)
+    return jsonify(job.to_dict()), 202
 
 
 # ---------- Errors ----------
@@ -144,29 +188,10 @@ def create_questions(app_id):
     if application is None:
         return not_found()
 
-    job_description = usable_job_description(application)
-    if job_description is None:
+    if usable_job_description(application) is None:
         return job_description_error()
 
-    try:
-        questions = generate_interview_questions(
-            application.company, application.role, job_description
-        )
-    except AIError:
-        current_app.logger.exception("Interview question generation failed")
-        return jsonify({"error": "Could not generate questions right now. Please try again."}), 502
-
-    InterviewQuestion.query.filter_by(application_id=app_id).delete()
-    for q in questions:
-        db.session.add(InterviewQuestion(application_id=app_id, **q))
-    db.session.commit()
-
-    saved = (
-        InterviewQuestion.query.filter_by(application_id=app_id)
-        .order_by(InterviewQuestion.id)
-        .all()
-    )
-    return jsonify([q.to_dict() for q in saved]), 201
+    return start_job("questions", application)
 
 
 # ---------- Resume match (AI) ----------
@@ -200,27 +225,20 @@ def create_match(app_id):
     if error:
         return error
 
-    job_description = usable_job_description(application)
-    if job_description is None:
+    if usable_job_description(application) is None:
         return job_description_error()
 
-    try:
-        result = analyze_match(application.role, job_description, resume.text)
-    except AIError:
-        current_app.logger.exception("Resume match analysis failed")
-        return jsonify({"error": "Could not analyze the match right now. Please try again."}), 502
+    return start_job("match", application, resume)
 
-    match = MatchAnalysis.query.filter_by(application_id=app_id, resume_id=resume.id).first()
-    if match is None:
-        match = MatchAnalysis(application_id=app_id, resume_id=resume.id)
-        db.session.add(match)
 
-    for field, value in result.items():
-        setattr(match, field, value)
-    match.analyzed_at = utc_now()
+# ---------- AI jobs ----------
 
-    db.session.commit()
-    return jsonify(match.to_dict()), 201
+@bp.get("/jobs/<job_id>")
+def get_job(job_id):
+    job = db.session.get(AIJob, job_id)
+    if job is None:
+        return jsonify({"error": "job not found"}), 404
+    return jsonify(job.to_dict())
 
 
 # ---------- Resumes ----------

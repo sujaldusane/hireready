@@ -28,7 +28,7 @@ def fake_match(monkeypatch):
         calls.append(resume_text)
         return dict(FAKE_RESULT)
 
-    monkeypatch.setattr("app.routes.analyze_match", fake_analyze)
+    monkeypatch.setattr("app.services.analyze_match", fake_analyze)
     return calls
 
 
@@ -54,6 +54,10 @@ def link(client, app_id, resume_id):
     client.patch(f"/applications/{app_id}", json={"resume_id": resume_id})
 
 
+def get_matches(client, app_id):
+    return client.get(f"/applications/{app_id}/matches").get_json()
+
+
 def test_match_requires_resume(client, fake_match):
     app_id = add_application(client)
     response = client.post(f"/applications/{app_id}/match")
@@ -77,11 +81,13 @@ def test_match_uses_linked_resume(app, client, fake_match):
     link(client, app_id, resume_id)
 
     response = client.post(f"/applications/{app_id}/match")
-    assert response.status_code == 201
-    data = response.get_json()
-    assert data["score"] == 78
-    assert data["resume_label"] == "Backend resume"
-    assert data["missing_keywords"] == ["Kubernetes"]
+    assert response.status_code == 202
+    assert response.get_json()["status"] == "succeeded"
+
+    match = get_matches(client, app_id)[0]
+    assert match["score"] == 78
+    assert match["resume_label"] == "Backend resume"
+    assert match["missing_keywords"] == ["Kubernetes"]
     assert fake_match[0].startswith("Backend resume")
 
 
@@ -91,9 +97,8 @@ def test_match_with_explicit_resume(app, client, fake_match):
     app_id = add_application(client)
     link(client, app_id, linked_id)
 
-    response = client.post(f"/applications/{app_id}/match", json={"resume_id": other_id})
-    assert response.status_code == 201
-    assert response.get_json()["resume_id"] == other_id
+    client.post(f"/applications/{app_id}/match", json={"resume_id": other_id})
+    assert get_matches(client, app_id)[0]["resume_id"] == other_id
 
 
 def test_match_rejects_missing_resume(client, fake_match):
@@ -110,8 +115,7 @@ def test_reanalyzing_replaces_result(app, client, fake_match):
     client.post(f"/applications/{app_id}/match")
     client.post(f"/applications/{app_id}/match")
 
-    matches = client.get(f"/applications/{app_id}/matches").get_json()
-    assert len(matches) == 1
+    assert len(get_matches(client, app_id)) == 1
 
 
 def test_compare_multiple_resumes(app, client, monkeypatch):
@@ -121,7 +125,7 @@ def test_compare_multiple_resumes(app, client, monkeypatch):
         label = resume_text.removesuffix(RESUME_SUFFIX)
         return {**FAKE_RESULT, "score": scores[label]}
 
-    monkeypatch.setattr("app.routes.analyze_match", fake_analyze)
+    monkeypatch.setattr("app.services.analyze_match", fake_analyze)
 
     general_id = add_resume(app, "General resume")
     backend_id = add_resume(app, "Backend resume")
@@ -130,24 +134,25 @@ def test_compare_multiple_resumes(app, client, monkeypatch):
     client.post(f"/applications/{app_id}/match", json={"resume_id": general_id})
     client.post(f"/applications/{app_id}/match", json={"resume_id": backend_id})
 
-    matches = client.get(f"/applications/{app_id}/matches").get_json()
+    matches = get_matches(client, app_id)
     assert [m["resume_label"] for m in matches] == ["Backend resume", "General resume"]
     assert [m["score"] for m in matches] == [85, 55]
 
 
-def test_ai_failure_returns_502_and_saves_nothing(app, client, monkeypatch):
+def test_ai_failure_marks_job_failed_and_saves_nothing(app, client, monkeypatch):
     def broken(role, job_description, resume_text):
         raise AIError("simulated failure")
 
-    monkeypatch.setattr("app.routes.analyze_match", broken)
+    monkeypatch.setattr("app.services.analyze_match", broken)
 
     resume_id = add_resume(app)
     app_id = add_application(client)
     link(client, app_id, resume_id)
 
-    response = client.post(f"/applications/{app_id}/match")
-    assert response.status_code == 502
-    assert client.get(f"/applications/{app_id}/matches").get_json() == []
+    job = client.post(f"/applications/{app_id}/match").get_json()
+    assert job["status"] == "failed"
+    assert "Could not analyze" in job["error"]
+    assert get_matches(client, app_id) == []
 
 
 def test_deleting_resume_deletes_its_matches(app, client, fake_match):
@@ -157,7 +162,7 @@ def test_deleting_resume_deletes_its_matches(app, client, fake_match):
     client.post(f"/applications/{app_id}/match")
 
     assert client.delete(f"/resumes/{resume_id}").status_code == 204
-    assert client.get(f"/applications/{app_id}/matches").get_json() == []
+    assert get_matches(client, app_id) == []
 
 
 def test_parse_match_clamps_score_and_cleans_lists():

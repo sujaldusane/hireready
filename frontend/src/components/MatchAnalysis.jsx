@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { analyzeMatch, getMatches } from "../api";
+import { analyzeMatch, getMatches, waitForJob } from "../api";
 
 function scoreLevel(score) {
   if (score >= 75) return "high";
@@ -28,12 +28,9 @@ export default function MatchAnalysis({ application, disabled }) {
     setError("");
     setAnalyzing(true);
     try {
-      const result = await analyzeMatch(application.id);
-      setMatches((prev) =>
-        [result, ...prev.filter((m) => m.resume_id !== result.resume_id)].sort(
-          (a, b) => b.score - a.score
-        )
-      );
+      const job = await analyzeMatch(application.id);
+      await waitForJob(job);
+      setMatches(await getMatches(application.id));
     } catch (err) {
       setError(err.message);
     } finally {
