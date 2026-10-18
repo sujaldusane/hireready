@@ -1,16 +1,18 @@
 from flask import Blueprint, current_app, jsonify, request
 from redis.exceptions import RedisError
 from werkzeug.utils import secure_filename
-
-from app import db
 from app.models import (
     JOB_ACTIVE_STATUSES,
     AIJob,
     Application,
+    InterviewQuestion,
     MatchAnalysis,
     Resume,
     utc_now,
 )
+
+from app import db
+
 from app.resumes import ResumeError, extract_pdf_text
 from app.tasks import enqueue_job
 
@@ -19,6 +21,8 @@ bp = Blueprint("api", __name__)
 VALID_STATUSES = {"Applied", "Interview", "Offer", "Rejected"}
 EDITABLE_FIELDS = ("company", "role", "status", "job_description", "resume_id")
 MIN_JOB_DESCRIPTION_LENGTH = 50
+MIN_ANSWER_LENGTH = 20
+MAX_ANSWER_LENGTH = 4000
 
 
 # ---------- Helpers ----------
@@ -46,24 +50,27 @@ def job_description_error():
     return jsonify({"error": "Add a job description of at least a few sentences first"}), 400
 
 
-def start_job(kind, application, resume=None):
+def start_job(kind, application, resume=None, question=None, input_text=None):
     """Create an AI job (or reuse an active one) and hand it to the queue."""
-    active = AIJob.query.filter(
-        AIJob.application_id == application.id,
-        AIJob.kind == kind,
-        AIJob.status.in_(JOB_ACTIVE_STATUSES),
-    )
-    if resume is not None:
-        active = active.filter(AIJob.resume_id == resume.id)
+    if kind != "feedback":
+        active = AIJob.query.filter(
+            AIJob.application_id == application.id,
+            AIJob.kind == kind,
+            AIJob.status.in_(JOB_ACTIVE_STATUSES),
+        )
+        if resume is not None:
+            active = active.filter(AIJob.resume_id == resume.id)
 
-    existing = active.first()
-    if existing is not None:
-        return jsonify(existing.to_dict()), 202
+        existing = active.first()
+        if existing is not None:
+            return jsonify(existing.to_dict()), 202
 
     job = AIJob(
         kind=kind,
         application_id=application.id,
         resume_id=resume.id if resume else None,
+        question_id=question.id if question else None,
+        input_text=input_text,
     )
     db.session.add(job)
     db.session.commit()
@@ -80,8 +87,6 @@ def start_job(kind, application, resume=None):
 
     db.session.refresh(job)
     return jsonify(job.to_dict()), 202
-
-
 # ---------- Errors ----------
 
 @bp.app_errorhandler(413)
@@ -229,6 +234,40 @@ def create_match(app_id):
         return job_description_error()
 
     return start_job("match", application, resume)
+
+
+# ---------- Practice answers (AI) ----------
+
+def question_not_found():
+    return jsonify({"error": "question not found"}), 404
+
+
+@bp.get("/questions/<int:question_id>/answers")
+def list_answers(question_id):
+    question = db.session.get(InterviewQuestion, question_id)
+    if question is None:
+        return question_not_found()
+    return jsonify([a.to_dict() for a in question.answers])
+
+
+@bp.post("/questions/<int:question_id>/answers")
+def submit_answer(question_id):
+    question = db.session.get(InterviewQuestion, question_id)
+    if question is None:
+        return question_not_found()
+
+    data = request.get_json(silent=True) or {}
+    answer = data.get("answer")
+    if not isinstance(answer, str):
+        return jsonify({"error": "answer is required"}), 400
+
+    answer = answer.strip()
+    if len(answer) < MIN_ANSWER_LENGTH:
+        return jsonify({"error": "Write a fuller answer before asking for feedback"}), 400
+    if len(answer) > MAX_ANSWER_LENGTH:
+        return jsonify({"error": f"Answers can be at most {MAX_ANSWER_LENGTH} characters"}), 400
+
+    return start_job("feedback", question.application, question=question, input_text=answer)
 
 
 # ---------- AI jobs ----------

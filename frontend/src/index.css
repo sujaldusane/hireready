@@ -204,3 +204,29 @@ button.secondary { background: white; color: #3b5bdb; border: 1px solid #3b5bdb;
   border: 1px solid #cbd2d9;
   font-size: 12px;
 }
+/* Practice mode */
+.question-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+}
+.practice-toggle { color: #3b5bdb; white-space: nowrap; flex-shrink: 0; }
+
+.practice {
+  margin: 10px 0 4px;
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  background: #f8f9fb;
+  border-radius: 8px;
+}
+.practice-actions { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.practice-actions .hint { margin: 0; }
+
+.feedback { display: flex; gap: 14px; align-items: flex-start; flex-wrap: wrap; }
+.score-small { width: 64px; height: 64px; font-size: 22px; }
+
+.your-answer { margin-top: 10px; font-size: 13px; color: #3e4c59; }
+.your-answer summary { cursor: pointer; font-weight: 600; }
+.your-answer p { margin: 6px 0 0; white-space: pre-wrap; line-height: 1.5; }

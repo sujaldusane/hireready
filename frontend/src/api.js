@@ -74,3 +74,11 @@ export async function waitForJob(job, { interval = 1500, timeout = 90000 } = {})
   }
   return current;
 }
+
+export const getAnswers = (questionId) => request(`/questions/${questionId}/answers`);
+
+export const submitAnswer = (questionId, answer) =>
+  request(`/questions/${questionId}/answers`, {
+    method: "POST",
+    body: JSON.stringify({ answer }),
+  });

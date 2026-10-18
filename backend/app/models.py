@@ -3,7 +3,7 @@ from datetime import date, datetime, timezone
 
 from app import db
 
-JOB_KINDS = ("questions", "match")
+JOB_KINDS = ("questions", "match", "feedback")
 JOB_ACTIVE_STATUSES = ("queued", "running")
 
 
@@ -60,7 +60,6 @@ class Application(db.Model):
             "resume_id": self.resume_id,
         }
 
-
 class InterviewQuestion(db.Model):
     __tablename__ = "interview_questions"
 
@@ -75,15 +74,56 @@ class InterviewQuestion(db.Model):
     question = db.Column(db.Text, nullable=False)
     created_at = db.Column(db.DateTime, default=utc_now)
 
+    answers = db.relationship(
+        "PracticeAnswer",
+        backref="question",
+        cascade="all, delete-orphan",
+        order_by="PracticeAnswer.created_at.desc()",
+    )
+    jobs = db.relationship(
+        "AIJob",
+        backref="question",
+        cascade="all, delete-orphan",
+    )
+
     def to_dict(self):
         return {
             "id": self.id,
             "application_id": self.application_id,
             "category": self.category,
             "question": self.question,
+            "attempt_count": len(self.answers),
         }
 
 
+class PracticeAnswer(db.Model):
+    __tablename__ = "practice_answers"
+
+    id = db.Column(db.Integer, primary_key=True)
+    question_id = db.Column(
+        db.Integer,
+        db.ForeignKey("interview_questions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    answer = db.Column(db.Text, nullable=False)
+    score = db.Column(db.Integer, nullable=False)
+    summary = db.Column(db.Text, nullable=False, default="")
+    strengths = db.Column(db.JSON, nullable=False, default=list)
+    improvements = db.Column(db.JSON, nullable=False, default=list)
+    created_at = db.Column(db.DateTime, default=utc_now)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "question_id": self.question_id,
+            "answer": self.answer,
+            "score": self.score,
+            "summary": self.summary,
+            "strengths": self.strengths,
+            "improvements": self.improvements,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
 class Resume(db.Model):
     __tablename__ = "resumes"
 
@@ -172,6 +212,13 @@ class AIJob(db.Model):
         nullable=True,
         index=True,
     )
+    question_id = db.Column(
+        db.Integer,
+        db.ForeignKey("interview_questions.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    input_text = db.Column(db.Text)
     error = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=utc_now)
     started_at = db.Column(db.DateTime)
@@ -184,5 +231,8 @@ class AIJob(db.Model):
             "status": self.status,
             "application_id": self.application_id,
             "resume_id": self.resume_id,
+             
+            "question_id": self.question_id,
+            
             "error": self.error,
         }
