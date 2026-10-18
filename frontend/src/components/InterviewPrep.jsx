@@ -1,12 +1,7 @@
 import { useEffect, useState } from "react";
-import MatchAnalysis from "./MatchAnalysis";
 import { generateQuestions, getQuestions, waitForJob } from "../api";
-
-const CATEGORY_LABELS = {
-  technical: "Technical",
-  behavioral: "Behavioral",
-  "role-specific": "Role-specific",
-};
+import MatchAnalysis from "./MatchAnalysis";
+import PracticeQuestion from "./PracticeQuestion";
 
 export default function InterviewPrep({ application, resumes, onUpdate }) {
   const [questions, setQuestions] = useState([]);
@@ -25,6 +20,7 @@ export default function InterviewPrep({ application, resumes, onUpdate }) {
   const descriptionChanged =
     description.trim() !== (application.job_description || "").trim();
   const hasDescription = Boolean((application.job_description || "").trim());
+  const hasPractice = questions.some((q) => q.attempt_count > 0);
 
   function handleResumeChange(e) {
     const value = e.target.value;
@@ -37,6 +33,13 @@ export default function InterviewPrep({ application, resumes, onUpdate }) {
   }
 
   async function handleGenerate() {
+    if (
+      hasPractice &&
+      !window.confirm("Regenerating replaces these questions and deletes their practice answers. Continue?")
+    ) {
+      return;
+    }
+
     setError("");
     setGenerating(true);
     try {
@@ -112,12 +115,7 @@ export default function InterviewPrep({ application, resumes, onUpdate }) {
         questions.length > 0 && (
           <ol className="questions">
             {questions.map((q) => (
-              <li key={q.id}>
-                <span className={`tag tag-${q.category}`}>
-                  {CATEGORY_LABELS[q.category] || q.category}
-                </span>
-                {q.question}
-              </li>
+              <PracticeQuestion key={q.id} question={q} />
             ))}
           </ol>
         )

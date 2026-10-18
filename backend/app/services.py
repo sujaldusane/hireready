@@ -1,6 +1,6 @@
 from app import db
-from app.ai import analyze_match, generate_interview_questions
-from app.models import InterviewQuestion, MatchAnalysis, utc_now
+from app.ai import analyze_match, evaluate_answer, generate_interview_questions
+from app.models import InterviewQuestion, MatchAnalysis, PracticeAnswer, utc_now
 
 
 def generate_questions_for(application):
@@ -32,3 +32,13 @@ def run_match_analysis(application, resume):
     for field, value in result.items():
         setattr(match, field, value)
     match.analyzed_at = utc_now()
+
+
+def run_answer_feedback(question, answer_text):
+    result = evaluate_answer(
+        question.application.role,
+        question.category,
+        question.question,
+        answer_text,
+    )
+    db.session.add(PracticeAnswer(question_id=question.id, answer=answer_text, **result))

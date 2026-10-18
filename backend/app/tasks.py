@@ -1,11 +1,11 @@
 from flask import current_app
 from redis import Redis
 from rq import Queue
+from app.services import generate_questions_for, run_answer_feedback, run_match_analysis
 
 from app import db
 from app.ai import AIError
 from app.models import AIJob, utc_now
-from app.services import generate_questions_for, run_match_analysis
 
 QUEUE_NAME = "ai"
 JOB_TIMEOUT_SECONDS = 120
@@ -13,6 +13,7 @@ JOB_TIMEOUT_SECONDS = 120
 FAILURE_MESSAGES = {
     "questions": "Could not generate questions right now. Please try again.",
     "match": "Could not analyze the match right now. Please try again.",
+    "feedback": "Could not get feedback right now. Please try again.",
 }
 
 _worker_app = None
@@ -56,6 +57,8 @@ def process_job(job_id):
             generate_questions_for(job.application)
         elif job.kind == "match":
             run_match_analysis(job.application, job.resume)
+        elif job.kind == "feedback":
+            run_answer_feedback(job.question, job.input_text)
         else:
             raise ValueError(f"Unknown job kind: {job.kind}")
         job.status = "succeeded"
