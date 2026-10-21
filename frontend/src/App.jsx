@@ -5,6 +5,9 @@ import ApplicationsPage from "./pages/ApplicationsPage";
 import DashboardPage from "./pages/DashboardPage";
 import NotFoundPage from "./pages/NotFoundPage";
 import ResumesPage from "./pages/ResumesPage";
+import MatchTab from "./pages/application/MatchTab";
+import OverviewTab from "./pages/application/OverviewTab";
+import PrepTab from "./pages/application/PrepTab";
 
 export default function App() {
   return (
@@ -12,7 +15,11 @@ export default function App() {
       <Route element={<AppShell />}>
         <Route index element={<DashboardPage />} />
         <Route path="applications" element={<ApplicationsPage />} />
-        <Route path="applications/:id" element={<ApplicationDetailPage />} />
+        <Route path="applications/:id" element={<ApplicationDetailPage />}>
+          <Route index element={<OverviewTab />} />
+          <Route path="match" element={<MatchTab />} />
+          <Route path="prep" element={<PrepTab />} />
+        </Route>
         <Route path="resumes" element={<ResumesPage />} />
         <Route path="*" element={<NotFoundPage />} />
       </Route>
