@@ -4,7 +4,7 @@ import { Check, Pencil } from "lucide-react";
 import { getMatches, getQuestions } from "../../api";
 import StatusBadge from "../../components/StatusBadge";
 import useData from "../../hooks/useData";
-import { formatDate } from "../../utils/format";
+import { todayISO } from "../../utils/format";
 
 const MIN_DESCRIPTION_LENGTH = 50;
 const LONG_DESCRIPTION_LENGTH = 1200;
@@ -53,6 +53,12 @@ export default function OverviewTab() {
   function handleResumeChange(e) {
     const value = e.target.value;
     updateApplication(application.id, { resume_id: value ? Number(value) : null });
+  }
+
+  function handleDateChange(e) {
+    if (e.target.value) {
+      updateApplication(application.id, { applied_date: e.target.value });
+    }
   }
 
   const steps = [
@@ -142,8 +148,18 @@ export default function OverviewTab() {
               </dd>
             </div>
             <div>
-              <dt>Applied</dt>
-              <dd>{formatDate(application.applied_date)}</dd>
+              <dt>
+                <label htmlFor="overview-applied">Applied on</label>
+              </dt>
+              <dd>
+                <input
+                  id="overview-applied"
+                  type="date"
+                  max={todayISO()}
+                  value={application.applied_date}
+                  onChange={handleDateChange}
+                />
+              </dd>
             </div>
             <div>
               <dt>
