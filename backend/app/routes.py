@@ -1,25 +1,28 @@
+from datetime import date
+
 from flask import Blueprint, current_app, jsonify, request
 from redis.exceptions import RedisError
+from sqlalchemy import func
 from werkzeug.utils import secure_filename
+
+from app import db
 from app.models import (
     JOB_ACTIVE_STATUSES,
     AIJob,
     Application,
     InterviewQuestion,
     MatchAnalysis,
+    PracticeAnswer,
     Resume,
     utc_now,
 )
-
-from app import db
-
 from app.resumes import ResumeError, extract_pdf_text
 from app.tasks import enqueue_job
 
 bp = Blueprint("api", __name__)
 
 VALID_STATUSES = {"Applied", "Interview", "Offer", "Rejected"}
-EDITABLE_FIELDS = ("company", "role", "status", "job_description", "resume_id")
+EDITABLE_FIELDS = ("company", "role", "status", "job_description", "resume_id", "applied_date")
 MIN_JOB_DESCRIPTION_LENGTH = 50
 MIN_ANSWER_LENGTH = 20
 MAX_ANSWER_LENGTH = 4000
@@ -39,6 +42,19 @@ def find_resume(resume_id):
     if resume is None:
         return None, (jsonify({"error": "resume not found"}), 400)
     return resume, None
+
+def parse_applied_date(value):
+    """Return (date, None) if valid, or (None, error_response) if not."""
+    error = (jsonify({"error": "applied_date must be a date like 2026-10-12"}), 400)
+    if not isinstance(value, str):
+        return None, error
+    try:
+        parsed = date.fromisoformat(value)
+    except ValueError:
+        return None, error
+    if parsed > date.today():
+        return None, (jsonify({"error": "applied_date can't be in the future"}), 400)
+    return parsed, None
 
 
 def usable_job_description(application):
@@ -120,16 +136,22 @@ def create_application():
     if status not in VALID_STATUSES:
         return jsonify({"error": f"status must be one of {sorted(VALID_STATUSES)}"}), 400
 
+    applied_date = date.today()
+    if data.get("applied_date"):
+        applied_date, error = parse_applied_date(data["applied_date"])
+        if error:
+            return error
+
     application = Application(
         company=data["company"],
         role=data["role"],
         status=status,
+        applied_date=applied_date,
         job_description=data.get("job_description"),
     )
     db.session.add(application)
     db.session.commit()
     return jsonify(application.to_dict()), 201
-
 
 @bp.get("/applications/<int:app_id>")
 def get_application(app_id):
@@ -145,7 +167,7 @@ def update_application(app_id):
     if application is None:
         return not_found()
 
-    data = request.get_json(silent=True) or {}
+    data = dict(request.get_json(silent=True) or {})
 
     if "status" in data and data["status"] not in VALID_STATUSES:
         return jsonify({"error": f"status must be one of {sorted(VALID_STATUSES)}"}), 400
@@ -158,13 +180,17 @@ def update_application(app_id):
         if error:
             return error
 
+    if "applied_date" in data:
+        data["applied_date"], error = parse_applied_date(data["applied_date"])
+        if error:
+            return error
+
     for field in EDITABLE_FIELDS:
         if field in data:
             setattr(application, field, data[field])
 
     db.session.commit()
     return jsonify(application.to_dict())
-
 
 @bp.delete("/applications/<int:app_id>")
 def delete_application(app_id):
@@ -279,7 +305,68 @@ def get_job(job_id):
         return jsonify({"error": "job not found"}), 404
     return jsonify(job.to_dict())
 
+# ---------- Insights (dashboard and resumes pages) ----------
 
+def grouped(query):
+    """Turn rows of (key, value) into a dict."""
+    return {key: value for key, value in query.all()}
+
+
+@bp.get("/insights")
+def insights():
+    question_counts = grouped(
+        db.session.query(InterviewQuestion.application_id, func.count(InterviewQuestion.id))
+        .group_by(InterviewQuestion.application_id)
+    )
+    practiced_counts = grouped(
+        db.session.query(
+            InterviewQuestion.application_id, func.count(func.distinct(InterviewQuestion.id))
+        )
+        .join(PracticeAnswer, PracticeAnswer.question_id == InterviewQuestion.id)
+        .group_by(InterviewQuestion.application_id)
+    )
+    best_scores = grouped(
+        db.session.query(MatchAnalysis.application_id, func.max(MatchAnalysis.score))
+        .group_by(MatchAnalysis.application_id)
+    )
+    resume_usage = grouped(
+        db.session.query(Application.resume_id, func.count(Application.id))
+        .filter(Application.resume_id.isnot(None))
+        .group_by(Application.resume_id)
+    )
+    resume_scores = {
+        resume_id: (count, average)
+        for resume_id, count, average in db.session.query(
+            MatchAnalysis.resume_id, func.count(MatchAnalysis.id), func.avg(MatchAnalysis.score)
+        ).group_by(MatchAnalysis.resume_id)
+    }
+
+    application_ids = [row.id for row in db.session.query(Application.id)]
+    resume_ids = [row.id for row in db.session.query(Resume.id)]
+
+    def resume_entry(resume_id):
+        count, average = resume_scores.get(resume_id, (0, None))
+        return {
+            "id": resume_id,
+            "application_count": resume_usage.get(resume_id, 0),
+            "analyzed_count": count,
+            "average_match_score": round(float(average)) if average is not None else None,
+        }
+
+    return jsonify(
+        {
+            "applications": [
+                {
+                    "id": app_id,
+                    "question_count": question_counts.get(app_id, 0),
+                    "practiced_count": practiced_counts.get(app_id, 0),
+                    "best_match_score": best_scores.get(app_id),
+                }
+                for app_id in application_ids
+            ],
+            "resumes": [resume_entry(resume_id) for resume_id in resume_ids],
+        }
+    )
 # ---------- Resumes ----------
 
 @bp.get("/resumes")

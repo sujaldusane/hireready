@@ -2,20 +2,20 @@ import { useState } from "react";
 import { useNavigate } from "react-router";
 import { STATUSES } from "../constants";
 import useData from "../hooks/useData";
+import { todayISO } from "../utils/format";
 import Modal from "./ui/Modal";
-
-const EMPTY_FORM = {
-  company: "",
-  role: "",
-  status: "Applied",
-  resume_id: "",
-  job_description: "",
-};
 
 export default function AddApplicationDialog({ onClose }) {
   const navigate = useNavigate();
   const { resumes, addApplication, updateApplication } = useData();
-  const [form, setForm] = useState(EMPTY_FORM);
+  const [form, setForm] = useState(() => ({
+    company: "",
+    role: "",
+    status: "Applied",
+    applied_date: todayISO(),
+    resume_id: "",
+    job_description: "",
+  }));
   const [saving, setSaving] = useState(false);
 
   const update = (field) => (e) => setForm((prev) => ({ ...prev, [field]: e.target.value }));
@@ -28,6 +28,7 @@ export default function AddApplicationDialog({ onClose }) {
       company: form.company.trim(),
       role: form.role.trim(),
       status: form.status,
+      applied_date: form.applied_date,
       job_description: form.job_description.trim() || null,
     });
 
@@ -66,17 +67,28 @@ export default function AddApplicationDialog({ onClose }) {
             </select>
           </label>
           <label className="field">
-            <span>Resume</span>
-            <select value={form.resume_id} onChange={update("resume_id")}>
-              <option value="">None yet</option>
-              {resumes.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.label}
-                </option>
-              ))}
-            </select>
+            <span>Applied on</span>
+            <input
+              type="date"
+              required
+              max={todayISO()}
+              value={form.applied_date}
+              onChange={update("applied_date")}
+            />
           </label>
         </div>
+
+        <label className="field">
+          <span>Resume sent</span>
+          <select value={form.resume_id} onChange={update("resume_id")}>
+            <option value="">None yet</option>
+            {resumes.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.label}
+              </option>
+            ))}
+          </select>
+        </label>
 
         <label className="field">
           <span>

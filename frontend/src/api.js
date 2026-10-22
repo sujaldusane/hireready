@@ -82,3 +82,6 @@ export const submitAnswer = (questionId, answer) =>
     method: "POST",
     body: JSON.stringify({ answer }),
   });
+  // ---------- Insights ----------
+
+export const getInsights = () => request("/insights");

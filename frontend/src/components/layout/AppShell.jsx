@@ -1,4 +1,5 @@
-import { NavLink, Outlet } from "react-router";
+import { useEffect } from "react";
+import { NavLink, Outlet, useLocation } from "react-router";
 import { Briefcase, FileText, LayoutDashboard } from "lucide-react";
 import useData from "../../hooks/useData";
 
@@ -17,8 +18,19 @@ function Brand() {
   );
 }
 
+// Scroll to the top when moving to a different page, but not when switching tabs within one.
+function useScrollToTopOnPageChange() {
+  const { pathname } = useLocation();
+  const page = pathname.split("/").slice(0, 3).join("/");
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [page]);
+}
+
 export default function AppShell() {
   const { loadError } = useData();
+  useScrollToTopOnPageChange();
 
   return (
     <div className="shell">

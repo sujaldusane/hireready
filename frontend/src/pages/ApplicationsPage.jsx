@@ -5,9 +5,15 @@ import AddApplicationDialog from "../components/AddApplicationDialog";
 import StatusBadge from "../components/StatusBadge";
 import { STATUSES } from "../constants";
 import useData from "../hooks/useData";
+import useDocumentTitle from "../hooks/useDocumentTitle";
 import { formatDate } from "../utils/format";
 
 const FILTERS = ["All", ...STATUSES];
+
+function byMostRecent(a, b) {
+  if (a.applied_date !== b.applied_date) return a.applied_date < b.applied_date ? 1 : -1;
+  return b.id - a.id;
+}
 
 function ListSkeleton() {
   return (
@@ -23,6 +29,7 @@ function ListSkeleton() {
 }
 
 export default function ApplicationsPage() {
+  useDocumentTitle("Applications");
   const { applications, resumes, loading } = useData();
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("All");
@@ -38,11 +45,13 @@ export default function ApplicationsPage() {
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return applications.filter(
-      (a) =>
-        (status === "All" || a.status === status) &&
-        (!q || a.company.toLowerCase().includes(q) || a.role.toLowerCase().includes(q))
-    );
+    return applications
+      .filter(
+        (a) =>
+          (status === "All" || a.status === status) &&
+          (!q || a.company.toLowerCase().includes(q) || a.role.toLowerCase().includes(q))
+      )
+      .sort(byMostRecent);
   }, [applications, query, status]);
 
   const resumeLabel = (id) => resumes.find((r) => r.id === id)?.label;
