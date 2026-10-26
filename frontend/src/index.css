@@ -1314,3 +1314,69 @@ button.secondary:hover:not(:disabled) {
 }
 
 .details input[type="date"] { max-width: 200px; }
+
+/* ---------- Accounts ---------- */
+.auth-page {
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+  min-height: 100dvh;
+  padding: 24px 16px;
+}
+.auth-card {
+  display: grid;
+  gap: 24px;
+  width: 100%;
+  max-width: 400px;
+  padding: 32px 28px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+}
+.auth-card .brand { padding: 0; }
+.auth-card button[type="submit"] { width: 100%; padding: 11px 14px; }
+.auth-footer {
+  font-size: var(--text-sm);
+  text-align: center;
+  color: var(--ink-muted);
+}
+@media (max-width: 559px) {
+  .auth-card { padding: 24px 20px; }
+}
+
+.auth-loading {
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+.field-label { font-size: var(--text-sm); font-weight: 600; }
+.password-input { position: relative; }
+.password-input input { padding-right: 42px; }
+.password-input .icon-btn {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  transform: translateY(-50%);
+}
+
+.account {
+  display: grid;
+  gap: 8px;
+  margin-top: auto;
+  padding: 14px 12px 0;
+  border-top: 1px solid var(--line);
+}
+.account-info { display: grid; min-width: 0; }
+.account-name,
+.account-email {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.account-name { font-size: var(--text-sm); font-weight: 600; }
+.account-email { font-size: var(--text-xs); color: var(--ink-faint); }
+.account .btn-ghost { justify-self: start; margin-left: -14px; }
+
+.mobile-header { justify-content: space-between; }

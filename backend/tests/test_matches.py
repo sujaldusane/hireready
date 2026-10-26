@@ -32,9 +32,11 @@ def fake_match(monkeypatch):
     return calls
 
 
-def add_resume(app, label="Backend resume"):
+def add_resume(app, owner_id, label="Backend resume"):
     with app.app_context():
-        resume = Resume(label=label, filename="resume.pdf", text=label + RESUME_SUFFIX)
+        resume = Resume(
+            user_id=owner_id, label=label, filename="resume.pdf", text=label + RESUME_SUFFIX
+        )
         db.session.add(resume)
         db.session.commit()
         return resume.id
@@ -65,8 +67,8 @@ def test_match_requires_resume(client, fake_match):
     assert fake_match == []
 
 
-def test_match_requires_job_description(app, client, fake_match):
-    resume_id = add_resume(app)
+def test_match_requires_job_description(app, client, owner_id, fake_match):
+    resume_id = add_resume(app, owner_id)
     app_id = add_application(client, job_description=None)
     link(client, app_id, resume_id)
 
@@ -75,8 +77,8 @@ def test_match_requires_job_description(app, client, fake_match):
     assert fake_match == []
 
 
-def test_match_uses_linked_resume(app, client, fake_match):
-    resume_id = add_resume(app)
+def test_match_uses_linked_resume(app, client, owner_id, fake_match):
+    resume_id = add_resume(app, owner_id)
     app_id = add_application(client)
     link(client, app_id, resume_id)
 
@@ -91,9 +93,9 @@ def test_match_uses_linked_resume(app, client, fake_match):
     assert fake_match[0].startswith("Backend resume")
 
 
-def test_match_with_explicit_resume(app, client, fake_match):
-    linked_id = add_resume(app, "General resume")
-    other_id = add_resume(app, "Backend resume")
+def test_match_with_explicit_resume(app, client, owner_id, fake_match):
+    linked_id = add_resume(app, owner_id, "General resume")
+    other_id = add_resume(app, owner_id, "Backend resume")
     app_id = add_application(client)
     link(client, app_id, linked_id)
 
@@ -107,8 +109,8 @@ def test_match_rejects_missing_resume(client, fake_match):
     assert response.status_code == 400
 
 
-def test_reanalyzing_replaces_result(app, client, fake_match):
-    resume_id = add_resume(app)
+def test_reanalyzing_replaces_result(app, client, owner_id, fake_match):
+    resume_id = add_resume(app, owner_id)
     app_id = add_application(client)
     link(client, app_id, resume_id)
 
@@ -118,7 +120,7 @@ def test_reanalyzing_replaces_result(app, client, fake_match):
     assert len(get_matches(client, app_id)) == 1
 
 
-def test_compare_multiple_resumes(app, client, monkeypatch):
+def test_compare_multiple_resumes(app, client, owner_id, monkeypatch):
     scores = {"General resume": 55, "Backend resume": 85}
 
     def fake_analyze(role, job_description, resume_text):
@@ -127,8 +129,8 @@ def test_compare_multiple_resumes(app, client, monkeypatch):
 
     monkeypatch.setattr("app.services.analyze_match", fake_analyze)
 
-    general_id = add_resume(app, "General resume")
-    backend_id = add_resume(app, "Backend resume")
+    general_id = add_resume(app, owner_id, "General resume")
+    backend_id = add_resume(app, owner_id, "Backend resume")
     app_id = add_application(client)
 
     client.post(f"/applications/{app_id}/match", json={"resume_id": general_id})
@@ -139,13 +141,13 @@ def test_compare_multiple_resumes(app, client, monkeypatch):
     assert [m["score"] for m in matches] == [85, 55]
 
 
-def test_ai_failure_marks_job_failed_and_saves_nothing(app, client, monkeypatch):
+def test_ai_failure_marks_job_failed_and_saves_nothing(app, client, owner_id, monkeypatch):
     def broken(role, job_description, resume_text):
         raise AIError("simulated failure")
 
     monkeypatch.setattr("app.services.analyze_match", broken)
 
-    resume_id = add_resume(app)
+    resume_id = add_resume(app, owner_id)
     app_id = add_application(client)
     link(client, app_id, resume_id)
 
@@ -155,8 +157,8 @@ def test_ai_failure_marks_job_failed_and_saves_nothing(app, client, monkeypatch)
     assert get_matches(client, app_id) == []
 
 
-def test_deleting_resume_deletes_its_matches(app, client, fake_match):
-    resume_id = add_resume(app)
+def test_deleting_resume_deletes_its_matches(app, client, owner_id, fake_match):
+    resume_id = add_resume(app, owner_id)
     app_id = add_application(client)
     link(client, app_id, resume_id)
     client.post(f"/applications/{app_id}/match")

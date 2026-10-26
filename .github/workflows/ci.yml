@@ -47,6 +47,7 @@ jobs:
         run: flask --app run db upgrade
         env:
           DATABASE_URL: postgresql://test_user:test_password@localhost:5432/hireready_test
+          JWT_SECRET_KEY: ci-only-secret-key-not-used-for-anything-real
 
       - run: pytest -v
 
@@ -82,6 +83,7 @@ jobs:
       POSTGRES_USER: ci_user
       POSTGRES_PASSWORD: ci_password
       ANTHROPIC_API_KEY: not-needed-for-build
+      JWT_SECRET_KEY: not-needed-for-build
 
     steps:
       - uses: actions/checkout@v5
