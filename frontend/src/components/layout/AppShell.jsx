@@ -1,7 +1,9 @@
 import { useEffect } from "react";
 import { NavLink, Outlet, useLocation } from "react-router";
-import { Briefcase, FileText, LayoutDashboard } from "lucide-react";
+import { Briefcase, FileText, LayoutDashboard, LogOut } from "lucide-react";
+import useAuth from "../../hooks/useAuth";
 import useData from "../../hooks/useData";
+import useToast from "../../hooks/useToast";
 
 const NAV_ITEMS = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard, end: true },
@@ -30,7 +32,14 @@ function useScrollToTopOnPageChange() {
 
 export default function AppShell() {
   const { loadError } = useData();
+  const { user, signOut } = useAuth();
+  const { showToast } = useToast();
   useScrollToTopOnPageChange();
+
+  async function handleSignOut() {
+    await signOut();
+    showToast("Signed out");
+  }
 
   return (
     <div className="shell">
@@ -48,10 +57,24 @@ export default function AppShell() {
             ))}
           </ul>
         </nav>
+
+        <div className="account">
+          <div className="account-info">
+            <span className="account-name">{user?.name || "Your account"}</span>
+            <span className="account-email">{user?.email}</span>
+          </div>
+          <button type="button" className="btn-ghost" onClick={handleSignOut}>
+            <LogOut size={16} aria-hidden="true" />
+            Sign out
+          </button>
+        </div>
       </aside>
 
       <header className="mobile-header">
         <Brand />
+        <button type="button" className="icon-btn" onClick={handleSignOut} aria-label="Sign out">
+          <LogOut size={18} aria-hidden="true" />
+        </button>
       </header>
 
       <main className="main">

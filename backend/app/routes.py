@@ -1,6 +1,7 @@
-from datetime import date
+from datetime import date, timedelta
 
-from flask import Blueprint, current_app, jsonify, request
+from flask import Blueprint, current_app, g, jsonify, request
+from flask_jwt_extended import get_jwt_identity, verify_jwt_in_request
 from redis.exceptions import RedisError
 from sqlalchemy import func
 from werkzeug.utils import secure_filename
@@ -26,6 +27,45 @@ EDITABLE_FIELDS = ("company", "role", "status", "job_description", "resume_id", 
 MIN_JOB_DESCRIPTION_LENGTH = 50
 MIN_ANSWER_LENGTH = 20
 MAX_ANSWER_LENGTH = 4000
+PUBLIC_ENDPOINTS = {"api.health"}
+
+
+# ---------- Authentication ----------
+
+@bp.before_request
+def require_login():
+    """Every route in this blueprint requires a signed-in user unless listed as public."""
+    if request.method == "OPTIONS" or request.endpoint in PUBLIC_ENDPOINTS:
+        return None
+    verify_jwt_in_request()
+    g.user_id = int(get_jwt_identity())
+    return None
+
+
+# ---------- Ownership helpers ----------
+
+def owned_application(app_id):
+    return Application.query.filter_by(id=app_id, user_id=g.user_id).first()
+
+
+def owned_resume(resume_id):
+    return Resume.query.filter_by(id=resume_id, user_id=g.user_id).first()
+
+
+def owned_question(question_id):
+    return (
+        InterviewQuestion.query.join(Application, InterviewQuestion.application_id == Application.id)
+        .filter(InterviewQuestion.id == question_id, Application.user_id == g.user_id)
+        .first()
+    )
+
+
+def owned_job(job_id):
+    return (
+        AIJob.query.join(Application, AIJob.application_id == Application.id)
+        .filter(AIJob.id == job_id, Application.user_id == g.user_id)
+        .first()
+    )
 
 
 # ---------- Helpers ----------
@@ -34,14 +74,19 @@ def not_found():
     return jsonify({"error": "application not found"}), 404
 
 
+def question_not_found():
+    return jsonify({"error": "question not found"}), 404
+
+
 def find_resume(resume_id):
-    """Return (resume, None) if valid, or (None, error_response) if not."""
+    """Return (resume, None) if it's valid and yours, or (None, error_response) if not."""
     if not isinstance(resume_id, int) or isinstance(resume_id, bool):
         return None, (jsonify({"error": "resume_id must be a number"}), 400)
-    resume = db.session.get(Resume, resume_id)
+    resume = owned_resume(resume_id)
     if resume is None:
         return None, (jsonify({"error": "resume not found"}), 400)
     return resume, None
+
 
 def parse_applied_date(value):
     """Return (date, None) if valid, or (None, error_response) if not."""
@@ -66,6 +111,15 @@ def job_description_error():
     return jsonify({"error": "Add a job description of at least a few sentences first"}), 400
 
 
+def ai_jobs_in_last_day():
+    since = utc_now() - timedelta(days=1)
+    return (
+        AIJob.query.join(Application, AIJob.application_id == Application.id)
+        .filter(Application.user_id == g.user_id, AIJob.created_at >= since)
+        .count()
+    )
+
+
 def start_job(kind, application, resume=None, question=None, input_text=None):
     """Create an AI job (or reuse an active one) and hand it to the queue."""
     if kind != "feedback":
@@ -80,6 +134,12 @@ def start_job(kind, application, resume=None, question=None, input_text=None):
         existing = active.first()
         if existing is not None:
             return jsonify(existing.to_dict()), 202
+
+    limit = current_app.config["AI_DAILY_JOB_LIMIT"]
+    if ai_jobs_in_last_day() >= limit:
+        return jsonify(
+            {"error": f"You've used all {limit} AI requests for today. Please try again tomorrow."}
+        ), 429
 
     job = AIJob(
         kind=kind,
@@ -103,6 +163,8 @@ def start_job(kind, application, resume=None, question=None, input_text=None):
 
     db.session.refresh(job)
     return jsonify(job.to_dict()), 202
+
+
 # ---------- Errors ----------
 
 @bp.app_errorhandler(413)
@@ -121,7 +183,11 @@ def health():
 
 @bp.get("/applications")
 def list_applications():
-    apps = Application.query.order_by(Application.applied_date.desc()).all()
+    apps = (
+        Application.query.filter_by(user_id=g.user_id)
+        .order_by(Application.applied_date.desc())
+        .all()
+    )
     return jsonify([a.to_dict() for a in apps])
 
 
@@ -143,6 +209,7 @@ def create_application():
             return error
 
     application = Application(
+        user_id=g.user_id,
         company=data["company"],
         role=data["role"],
         status=status,
@@ -153,9 +220,10 @@ def create_application():
     db.session.commit()
     return jsonify(application.to_dict()), 201
 
+
 @bp.get("/applications/<int:app_id>")
 def get_application(app_id):
-    application = db.session.get(Application, app_id)
+    application = owned_application(app_id)
     if application is None:
         return not_found()
     return jsonify(application.to_dict())
@@ -163,7 +231,7 @@ def get_application(app_id):
 
 @bp.patch("/applications/<int:app_id>")
 def update_application(app_id):
-    application = db.session.get(Application, app_id)
+    application = owned_application(app_id)
     if application is None:
         return not_found()
 
@@ -192,9 +260,10 @@ def update_application(app_id):
     db.session.commit()
     return jsonify(application.to_dict())
 
+
 @bp.delete("/applications/<int:app_id>")
 def delete_application(app_id):
-    application = db.session.get(Application, app_id)
+    application = owned_application(app_id)
     if application is None:
         return not_found()
 
@@ -207,7 +276,7 @@ def delete_application(app_id):
 
 @bp.get("/applications/<int:app_id>/questions")
 def list_questions(app_id):
-    application = db.session.get(Application, app_id)
+    application = owned_application(app_id)
     if application is None:
         return not_found()
     return jsonify([q.to_dict() for q in application.questions])
@@ -215,7 +284,7 @@ def list_questions(app_id):
 
 @bp.post("/applications/<int:app_id>/questions")
 def create_questions(app_id):
-    application = db.session.get(Application, app_id)
+    application = owned_application(app_id)
     if application is None:
         return not_found()
 
@@ -229,7 +298,7 @@ def create_questions(app_id):
 
 @bp.get("/applications/<int:app_id>/matches")
 def list_matches(app_id):
-    application = db.session.get(Application, app_id)
+    application = owned_application(app_id)
     if application is None:
         return not_found()
 
@@ -243,7 +312,7 @@ def list_matches(app_id):
 
 @bp.post("/applications/<int:app_id>/match")
 def create_match(app_id):
-    application = db.session.get(Application, app_id)
+    application = owned_application(app_id)
     if application is None:
         return not_found()
 
@@ -264,13 +333,9 @@ def create_match(app_id):
 
 # ---------- Practice answers (AI) ----------
 
-def question_not_found():
-    return jsonify({"error": "question not found"}), 404
-
-
 @bp.get("/questions/<int:question_id>/answers")
 def list_answers(question_id):
-    question = db.session.get(InterviewQuestion, question_id)
+    question = owned_question(question_id)
     if question is None:
         return question_not_found()
     return jsonify([a.to_dict() for a in question.answers])
@@ -278,7 +343,7 @@ def list_answers(question_id):
 
 @bp.post("/questions/<int:question_id>/answers")
 def submit_answer(question_id):
-    question = db.session.get(InterviewQuestion, question_id)
+    question = owned_question(question_id)
     if question is None:
         return question_not_found()
 
@@ -300,10 +365,11 @@ def submit_answer(question_id):
 
 @bp.get("/jobs/<job_id>")
 def get_job(job_id):
-    job = db.session.get(AIJob, job_id)
+    job = owned_job(job_id)
     if job is None:
         return jsonify({"error": "job not found"}), 404
     return jsonify(job.to_dict())
+
 
 # ---------- Insights (dashboard and resumes pages) ----------
 
@@ -316,6 +382,8 @@ def grouped(query):
 def insights():
     question_counts = grouped(
         db.session.query(InterviewQuestion.application_id, func.count(InterviewQuestion.id))
+        .join(Application, InterviewQuestion.application_id == Application.id)
+        .filter(Application.user_id == g.user_id)
         .group_by(InterviewQuestion.application_id)
     )
     practiced_counts = grouped(
@@ -323,26 +391,35 @@ def insights():
             InterviewQuestion.application_id, func.count(func.distinct(InterviewQuestion.id))
         )
         .join(PracticeAnswer, PracticeAnswer.question_id == InterviewQuestion.id)
+        .join(Application, InterviewQuestion.application_id == Application.id)
+        .filter(Application.user_id == g.user_id)
         .group_by(InterviewQuestion.application_id)
     )
     best_scores = grouped(
         db.session.query(MatchAnalysis.application_id, func.max(MatchAnalysis.score))
+        .join(Application, MatchAnalysis.application_id == Application.id)
+        .filter(Application.user_id == g.user_id)
         .group_by(MatchAnalysis.application_id)
     )
     resume_usage = grouped(
         db.session.query(Application.resume_id, func.count(Application.id))
-        .filter(Application.resume_id.isnot(None))
+        .filter(Application.user_id == g.user_id, Application.resume_id.isnot(None))
         .group_by(Application.resume_id)
     )
     resume_scores = {
         resume_id: (count, average)
         for resume_id, count, average in db.session.query(
             MatchAnalysis.resume_id, func.count(MatchAnalysis.id), func.avg(MatchAnalysis.score)
-        ).group_by(MatchAnalysis.resume_id)
+        )
+        .join(Resume, MatchAnalysis.resume_id == Resume.id)
+        .filter(Resume.user_id == g.user_id)
+        .group_by(MatchAnalysis.resume_id)
     }
 
-    application_ids = [row.id for row in db.session.query(Application.id)]
-    resume_ids = [row.id for row in db.session.query(Resume.id)]
+    application_ids = [
+        row.id for row in db.session.query(Application.id).filter(Application.user_id == g.user_id)
+    ]
+    resume_ids = [row.id for row in db.session.query(Resume.id).filter(Resume.user_id == g.user_id)]
 
     def resume_entry(resume_id):
         count, average = resume_scores.get(resume_id, (0, None))
@@ -367,11 +444,15 @@ def insights():
             "resumes": [resume_entry(resume_id) for resume_id in resume_ids],
         }
     )
+
+
 # ---------- Resumes ----------
 
 @bp.get("/resumes")
 def list_resumes():
-    resumes = Resume.query.order_by(Resume.created_at.desc()).all()
+    resumes = (
+        Resume.query.filter_by(user_id=g.user_id).order_by(Resume.created_at.desc()).all()
+    )
     return jsonify([r.to_dict() for r in resumes])
 
 
@@ -391,7 +472,7 @@ def upload_resume():
         return jsonify({"error": str(exc)}), 400
 
     label = (request.form.get("label") or "").strip()[:120] or filename
-    resume = Resume(label=label, filename=filename, text=text)
+    resume = Resume(user_id=g.user_id, label=label, filename=filename, text=text)
     db.session.add(resume)
     db.session.commit()
     return jsonify(resume.to_dict()), 201
@@ -399,7 +480,7 @@ def upload_resume():
 
 @bp.delete("/resumes/<int:resume_id>")
 def delete_resume(resume_id):
-    resume = db.session.get(Resume, resume_id)
+    resume = owned_resume(resume_id)
     if resume is None:
         return jsonify({"error": "resume not found"}), 404
     db.session.delete(resume)

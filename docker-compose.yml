@@ -27,6 +27,9 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/hireready
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       REDIS_URL: redis://redis:6379/0
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+      REGISTRATION_CODE: ${REGISTRATION_CODE:-}
+      AI_DAILY_JOB_LIMIT: ${AI_DAILY_JOB_LIMIT:-50}
     ports:
       - "5000:5000"
     depends_on:
@@ -47,6 +50,7 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/hireready
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       REDIS_URL: redis://redis:6379/0
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
     depends_on:
       redis:
         condition: service_healthy

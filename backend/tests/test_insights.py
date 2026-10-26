@@ -2,12 +2,12 @@ from app import db
 from app.models import Application, InterviewQuestion, MatchAnalysis, PracticeAnswer, Resume
 
 
-def seed(app):
+def seed(app, owner_id):
     with app.app_context():
-        resume_a = Resume(label="Resume A", filename="a.pdf", text="resume a text")
-        resume_b = Resume(label="Resume B", filename="b.pdf", text="resume b text")
-        stripe = Application(company="Stripe", role="SWE", resume=resume_a)
-        google = Application(company="Google", role="SWE")
+        resume_a = Resume(user_id=owner_id, label="Resume A", filename="a.pdf", text="resume a")
+        resume_b = Resume(user_id=owner_id, label="Resume B", filename="b.pdf", text="resume b")
+        stripe = Application(user_id=owner_id, company="Stripe", role="SWE", resume=resume_a)
+        google = Application(user_id=owner_id, company="Google", role="SWE")
         db.session.add_all([resume_a, resume_b, stripe, google])
         db.session.flush()
 
@@ -33,8 +33,8 @@ def test_insights_when_empty(client):
     assert client.get("/insights").get_json() == {"applications": [], "resumes": []}
 
 
-def test_application_insights(app, client):
-    stripe_id, google_id, _, _ = seed(app)
+def test_application_insights(app, client, owner_id):
+    stripe_id, google_id, _, _ = seed(app, owner_id)
     data = {a["id"]: a for a in client.get("/insights").get_json()["applications"]}
 
     assert data[stripe_id] == {
@@ -48,8 +48,8 @@ def test_application_insights(app, client):
     assert data[google_id]["best_match_score"] == 81
 
 
-def test_resume_insights(app, client):
-    _, _, resume_a_id, resume_b_id = seed(app)
+def test_resume_insights(app, client, owner_id):
+    _, _, resume_a_id, resume_b_id = seed(app, owner_id)
     data = {r["id"]: r for r in client.get("/insights").get_json()["resumes"]}
 
     assert data[resume_a_id]["application_count"] == 1
