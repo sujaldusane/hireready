@@ -8,7 +8,7 @@ from flask_jwt_extended import create_access_token, get_jwt_identity, jwt_requir
 from sqlalchemy.exc import IntegrityError
 from werkzeug.security import check_password_hash, generate_password_hash
 
-from app import db
+from app import db, limiter
 from app.models import RefreshToken, User, utc_now
 
 auth_bp = Blueprint("auth", __name__, url_prefix="/auth")
@@ -61,6 +61,8 @@ def settings():
 
 
 @auth_bp.post("/register")
+@limiter.limit("10 per hour")
+
 def register():
     data, email, password = read_credentials()
 
@@ -92,6 +94,8 @@ def register():
 
 
 @auth_bp.post("/login")
+@limiter.limit("10 per hour")
+
 def login():
     _, email, password = read_credentials()
     user = User.query.filter_by(email=email).first() if email else None
@@ -106,6 +110,8 @@ def login():
 
 
 @auth_bp.post("/refresh")
+@limiter.limit("30 per hour")
+
 def refresh():
     data = request.get_json(silent=True) or {}
     raw_token = data.get("refresh_token")
