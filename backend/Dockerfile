@@ -10,6 +10,13 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
+# Strip Windows line endings (just in case) and make the script executable.
+RUN sed -i 's/\r$//' start.sh && chmod +x start.sh
+
+# Run as a regular user instead of root.
+RUN useradd --create-home appuser && chown -R appuser /app
+USER appuser
+
 EXPOSE 5000
 
-CMD ["sh", "-c", "flask --app run db upgrade && exec gunicorn --bind 0.0.0.0:5000 run:app"]
+CMD ["./start.sh"]
