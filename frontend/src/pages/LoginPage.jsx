@@ -35,7 +35,7 @@ export default function LoginPage() {
   return (
     <AuthLayout
       title="Sign in"
-      subtitle="Pick up where you left off in your search."
+      subtitle="Welcome back. Pick up where you left off in your search."
       footer={
         <>
           New to HireReady?{" "}
